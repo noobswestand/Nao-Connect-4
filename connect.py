@@ -1,251 +1,424 @@
-# Four-In-A-Row (a Connect Four clone)
-# http://inventwithpython.com/blog
-# By Al Sweigart al@inventwithpython.com
 
-import random
-import copy
 import sys
+import numpy
+
+
+BOARD_SIZE_X = 7
+BOARD_SIZE_Y = 6
+SEARCH_DEPTH = 6#2=ez,4=normal,6=hard  
+
+COMPUTER_PLAYER = 1
+HUMAN_PLAYER = -1
 
 
 BOARDWIDTH = 7
 BOARDHEIGHT = 6
 
-def main():
-    """
-    b = getNewBoard()
-    b[6][5] = 'X'
-    b[5][4] = 'X'
-    b[4][3] = 'X'
-    b[3][2] = 'X'
-    drawBoard(b)
-    print(isWinner(b, 'X'))
+gameState = [[0 for col in range(BOARD_SIZE_X)] for row in range(BOARD_SIZE_Y)]
+moveHeights = [0] * BOARD_SIZE_X
+player = COMPUTER_PLAYER
+opponent = HUMAN_PLAYER
 
-    sys.exit()
-    """
 
-    print('Four-In-A-Row')
-    print()
+#
+# Method that runs the minimax algorithm and returns
+# the move and score of each call.
+#
 
-    while True:
-        humanTile, computerTile = enterHumanTile()
-        turn = whoGoesFirst()
-        print('The %s player will go first.' % (turn))
-        mainBoard = getNewBoard()
+def minimax(gameState, depth, player, opponent):
+    availableMoves = BOARD_SIZE_X
+    for i in range(0, BOARD_SIZE_X):
+        if gameState[0][i] != 0:
+            availableMoves -= 1
 
-        while True:
-            if turn == 'human':
-                drawBoard(mainBoard)
-                move = getHumanMove(mainBoard)
-                makeMove(mainBoard, humanTile, move)
-                if isWinner(mainBoard, humanTile):
-                    winner = 'human'
-                    break
-                turn = 'computer'
-            else:
-                drawBoard(mainBoard)
-                print('The computer is thinking...')
-                move = getComputerMove(mainBoard, computerTile)
-                makeMove(mainBoard, computerTile, move)
-                if isWinner(mainBoard, computerTile):
-                    winner = 'computer'
-                    break
-                turn = 'human'
+    if depth == 0 or availableMoves == 0:
+        score = evaluateScore(gameState, player, opponent)
+        return None, score
 
-            if isBoardFull(mainBoard):
-                winner = 'tie'
+    bestScore = None
+    bestMove = None
+
+    for i in range(0, BOARD_SIZE_X):
+        # If moves cannot be made on column, skip it
+        if gameState[0][i] != 0:
+            continue
+
+        currentMove = [0, i]
+
+        for j in range(0, BOARD_SIZE_Y - 1):
+            if gameState[j + 1][i] != 0:
+                gameState[j][i] = player
+                currentMove[0] = j
                 break
+            elif j == BOARD_SIZE_Y - 2:
+                gameState[j+1][i] = player
+                currentMove[0] = j+1
 
-        drawBoard(mainBoard)
-        print('Winner is: %s' % winner)
-        if not playAgain():
-            break
+        # Recursive minimax call, with reduced depth
+        move, score = minimax(gameState, depth - 1, opponent, player)
 
+        gameState[currentMove[0]][currentMove[1]] = 0
 
-def playAgain():
-    # This function returns True if the player wants to play again, otherwise it returns False.
-    print('Do you want to play again? (yes or no)')
-    return input().lower().startswith('y')
-
-
-def enterHumanTile():
-    # Let's the human player type which tile they want to be.
-    # Returns a list with the human player's tile as the first item, and the computer's tile as the second.
-    tile = ''
-    while not (tile == 'X' or tile == 'O'):
-        print('Do you want to be X or O?')
-        tile = input().upper()
-
-    # the first element in the tuple is the human player's tile, the second is the computer's tile.
-    if tile == 'X':
-        return ['X', 'O']
-    else:
-        return ['O', 'X']
-
-
-def drawBoard(board):
-    print()
-    print(' ', end='')
-    for x in range(1, BOARDWIDTH + 1):
-        print(' %s  ' % x, end='')
-    print()
-
-    print('+---+' + ('---+' * (BOARDWIDTH - 1)))
-
-    for y in range(BOARDHEIGHT):
-        print('|   |' + ('   |' * (BOARDWIDTH - 1)))
-
-        print('|', end='')
-        for x in range(BOARDWIDTH):
-            print(' %s |' % board[x][y], end='')
-        print()
-
-        print('|   |' + ('   |' * (BOARDWIDTH - 1)))
-
-        print('+---+' + ('---+' * (BOARDWIDTH - 1)))
-
-
-def getNewBoard():
-    board = []
-    for x in range(BOARDWIDTH):
-        board.append([' '] * BOARDHEIGHT)
-    return board
-
-
-def getHumanMove(board):
-    while True:
-        print('Which column do you want to move on? (1-%s, or "quit" to quit game)' % (BOARDWIDTH))
-        move = input()
-        if move.lower().startswith('q'):
-            sys.exit()
-        if not move.isdigit():
-            continue
-        move = int(move) - 1
-        if isValidMove(board, move):
-            return move
-
-def getComputerMove(board, computerTile):
-    potentialMoves = getPotentialMoves(board, computerTile, 2)
-    bestMoveScore = max([potentialMoves[i] for i in range(BOARDWIDTH) if isValidMove(board, i)])
-    bestMoves = []
-    for i in range(len(potentialMoves)):
-        if potentialMoves[i] == bestMoveScore:
-            bestMoves.append(i)
-    return random.choice(bestMoves)
-
-
-def getPotentialMoves(board, playerTile, lookAhead):
-    if lookAhead == 0:
-        return [0] * BOARDWIDTH
-
-    potentialMoves = []
-
-    if playerTile == 'X':
-        enemyTile = 'O'
-    else:
-        enemyTile = 'X'
-
-    # Returns (best move, average condition of this state)
-    if isBoardFull(board):
-        return [0] * BOARDWIDTH
-
-    # Figure out the best move to make.
-    potentialMoves = [0] * BOARDWIDTH
-    for playerMove in range(BOARDWIDTH):
-        dupeBoard = copy.deepcopy(board)
-        if not isValidMove(dupeBoard, playerMove):
-            continue
-        makeMove(dupeBoard, playerTile, playerMove)
-        if isWinner(dupeBoard, playerTile):
-            potentialMoves[playerMove] = 1
-            break
+        if player == COMPUTER_PLAYER:
+            if bestScore == None or score > bestScore:
+                bestScore = score
+                bestMove = currentMove
         else:
-            # do other player's moves and determine best one
-            if isBoardFull(dupeBoard):
-                potentialMoves[playerMove] = 0
-            else:
-                for enemyMove in range(BOARDWIDTH):
-                    dupeBoard2 = copy.deepcopy(dupeBoard)
-                    if not isValidMove(dupeBoard2, enemyMove):
-                        continue
-                    makeMove(dupeBoard2, enemyTile, enemyMove)
-                    if isWinner(dupeBoard2, enemyTile):
-                        potentialMoves[playerMove] = -1
-                        break
-                    else:
-                        results = getPotentialMoves(dupeBoard2, playerTile, lookAhead - 1)
-                        potentialMoves[playerMove] += (sum(results) / BOARDWIDTH) / BOARDWIDTH
-    return potentialMoves
+            if bestScore == None or score < bestScore:
+                bestScore = score
+                bestMove = currentMove
 
-def whoGoesFirst():
-    # Randomly choose the player who goes first.
-    if random.randint(0, 1) == 0:
-        return 'computer'
+    return bestMove, bestScore
+
+#
+# Method that calculates the heuristic value of a given
+# board state. The heuristic adds a point to a player
+# for each empty slot that could grant a player victory.
+#
+
+def evaluateScore(gameState, player, opponent):
+    # Return infinity if a player has won in the given board
+    score = checkWin(gameState)
+
+    if score == player:
+        return float("inf")
+    elif score == opponent:
+        return float("-inf")
     else:
-        return 'human'
+        score = 0
 
+    for i in range(0, BOARD_SIZE_Y):
+        for j in range(0, BOARD_SIZE_X):
+            if gameState[i][j] == 0:
+                score += scoreOfCoordinate(gameState, i, j, player, opponent)
 
-def makeMove(board, player, column):
-    for y in range(BOARDHEIGHT-1, -1, -1):
-        if board[column][y] == ' ':
-            board[column][y] = player
-            return
+    return score
 
+#
+# Method that evaluates if a given coordinate has a possible win
+# for any player. Each coordinate evaluates if a possible win can be
+# found vertically, horizontally or in both diagonals.
+#
 
-def isValidMove(board, move):
-    if move < 0 or move >= (BOARDWIDTH):
-        return False
+def scoreOfCoordinate(gameState, i, j, player, opponent):
+    score = 0
 
-    if board[move][0] != ' ':
-        return False
+    # Check vertical line
+    score += scoreOfLine(
+                     gameState=gameState,
+                     i=i,
+                     j=j,
+                     rowIncrement=-1,
+                     columnIncrement=0,
+                     firstRowCondition=-1,
+                     secondRowCondition=BOARD_SIZE_Y,
+                     firstColumnCondition=None,
+                     secondColumnCondition=None,
+                     player=player,
+                     opponent=opponent
+                 )
 
-    return True
+    # Check horizontal line
+    score += scoreOfLine(
+                     gameState=gameState,
+                     i=i,
+                     j=j,
+                     rowIncrement=0,
+                     columnIncrement=-1,
+                     firstRowCondition=None,
+                     secondRowCondition=None,
+                     firstColumnCondition=-1,
+                     secondColumnCondition=BOARD_SIZE_X,
+                     player=player,
+                     opponent=opponent
+                 )
 
+    # Check diagonal /
+    score += scoreOfLine(
+                     gameState=gameState,
+                     i=i,
+                     j=j,
+                     rowIncrement=-1,
+                     columnIncrement=1,
+                     firstRowCondition=-1,
+                     secondRowCondition=BOARD_SIZE_Y,
+                     firstColumnCondition=BOARD_SIZE_X,
+                     secondColumnCondition=-1,
+                     player=player,
+                     opponent=opponent
+                 )
 
-def isBoardFull(board):
-    for x in range(BOARDWIDTH):
-        for y in range(BOARDHEIGHT):
-            if board[x][y] == ' ':
-                return False
-    return True
+    # Check diagonal \
+    score += scoreOfLine(
+                     gameState=gameState,
+                     i=i,
+                     j=j,
+                     rowIncrement=-1,
+                     columnIncrement=-1,
+                     firstRowCondition=-1,
+                     secondRowCondition=BOARD_SIZE_Y,
+                     firstColumnCondition=-1,
+                     secondColumnCondition=BOARD_SIZE_X,
+                     player=player,
+                     opponent=opponent
+                 )
 
+    return score
 
-def isWinner(board, tile):
-    # check horizontal spaces
-    for y in range(BOARDHEIGHT):
-        for x in range(BOARDWIDTH - 3):
-            if board[x][y] == tile and board[x+1][y] == tile and board[x+2][y] == tile and board[x+3][y] == tile:
-                return True
+#
+# Method that searches through a line (vertical, horizontal or
+# diagonal) to get the heuristic value of the given coordinate.
+#
 
-    # check vertical spaces
-    for x in range(BOARDWIDTH):
-        for y in range(BOARDHEIGHT - 3):
-            if board[x][y] == tile and board[x][y+1] == tile and board[x][y+2] == tile and board[x][y+3] == tile:
-                return True
+def scoreOfLine(
+    gameState,
+    i,
+    j,
+    rowIncrement,
+    columnIncrement,
+    firstRowCondition,
+    secondRowCondition,
+    firstColumnCondition,
+    secondColumnCondition,
+    player,
+    opponent
+):
+    score = 0
+    currentInLine = 0
+    valsInARow = 0
+    valsInARowPrev = 0
 
-    # check / diagonal spaces
-    for x in range(BOARDWIDTH - 3):
-        for y in range(3, BOARDHEIGHT):
-            if board[x][y] == tile and board[x+1][y-1] == tile and board[x+2][y-2] == tile and board[x+3][y-3] == tile:
-                return True
+    # Iterate in one side of the line until a move from another
+    # player or an empty space is found
+    row = i + rowIncrement
+    column = j + columnIncrement
+    firstLoop = True
+    while (
+        row != firstRowCondition and
+        column != firstColumnCondition and
+        gameState[row][column] != 0
+    ):
+        if firstLoop:
+            currentInLine = gameState[row][column]
+            firstLoop = False
+        if currentInLine == gameState[row][column]:
+            valsInARow += 1
+        else:
+            break
+        row += rowIncrement
+        column += columnIncrement
 
-    # check \ diagonal spaces
-    for x in range(BOARDWIDTH - 3):
-        for y in range(BOARDHEIGHT - 3):
-            if board[x][y] == tile and board[x+1][y+1] == tile and board[x+2][y+2] == tile and board[x+3][y+3] == tile:
-                return True
+    # Iterate on second side of the line
+    row = i - rowIncrement
+    column = j - columnIncrement
+    firstLoop = True
+    while (
+        row != secondRowCondition and
+        column != secondColumnCondition and
+        gameState[row][column] != 0
+    ):
+        if firstLoop:
+            firstLoop = False
 
-    return False
+            # Verify if previous side of line guaranteed a win on the
+            # coordinate, and if not, continue counting to see if the
+            # given coordinate can complete a line from in between.
+            if currentInLine != gameState[row][column]:
+                if valsInARow == 3 and currentInLine == player:
+                    score += 1
+                elif valsInARow == 3 and currentInLine == opponent:
+                    score -= 1
+            else:
+                valsInARowPrev = valsInARow
 
+            valsInARow = 0
+            currentInLine = gameState[row][column]
 
-def playAgain():
-    # This function returns True if the player wants to play again, otherwise it returns False.
-    print('Do you want to play again? (yes or no)')
-    return input().lower().startswith('y')
+        if currentInLine == gameState[row][column]:
+            valsInARow += 1
+        else:
+            break
+        row -= rowIncrement
+        column -= columnIncrement
 
+    if valsInARow + valsInARowPrev >= 3 and currentInLine == player:
+        score += 1
+    elif valsInARow + valsInARowPrev >= 3 and currentInLine == opponent:
+        score -= 1
 
+    return score
 
+#
+# Method that executes the first call of the minimax method and
+# returns the move to be executed by the computer. It also verifies
+# if any immediate wins or loses are present.
+#
 
+def bestMove(gameState, player, opponent):
+    for i in range(0, BOARD_SIZE_X):
+        # If moves cannot be made on column, skip it
+        if gameState[0][i] != 0:
+            continue
 
+        currentMove = [0, i]
 
-if __name__ == '__main__':
-    main()
+        for j in range(0, BOARD_SIZE_Y - 1):
+            if gameState[j + 1][i] != 0:
+                gameState[j][i] = player
+                currentMove[0] = j
+                break
+            elif j == BOARD_SIZE_Y - 2:
+                gameState[j+1][i] = player
+                currentMove[0] = j+1
+
+        winner = checkWin(gameState)
+        gameState[currentMove[0]][currentMove[1]] = 0
+
+        if winner == COMPUTER_PLAYER:
+            return currentMove[1]
+
+    for i in range(0, BOARD_SIZE_X):
+        # If moves cannot be made on column, skip it
+        if gameState[0][i] != 0:
+            continue
+
+        currentMove = [0, i]
+
+        for j in range(0, BOARD_SIZE_Y - 1):
+            if gameState[j + 1][i] != 0:
+                gameState[j][i] = opponent
+                currentMove[0] = j
+                break
+            elif j == BOARD_SIZE_Y - 2:
+                gameState[j+1][i] = opponent
+                currentMove[0] = j+1
+
+        winner = checkWin(gameState)
+        gameState[currentMove[0]][currentMove[1]] = 0
+
+        if winner == HUMAN_PLAYER:
+            return currentMove[1]
+
+    move, score = minimax(gameState, SEARCH_DEPTH, player, opponent)
+    return move[1]
+
+#
+# Method that verifies if the current board is in a winning state
+# for any player, returning infinity if that is the case.
+#
+
+def checkWin(gameState):
+    current = 0
+    currentCount = 0
+    computer_wins = 0
+    opponent_wins = 0
+
+    # Check horizontal wins
+    for i in range(0, BOARD_SIZE_Y):
+        for j in range(0, BOARD_SIZE_X):
+            if currentCount == 0:
+                if gameState[i][j] != 0:
+                    current = gameState[i][j]
+                    currentCount += 1
+            elif currentCount == 4:
+                if current == COMPUTER_PLAYER:
+                    computer_wins += 1
+                else:
+                    opponent_wins += 1
+                currentCount = 0
+                break
+            elif gameState[i][j] != current:
+                if gameState[i][j] != 0:
+                    current = gameState[i][j]
+                    currentCount = 1
+                else:
+                    current = 0
+                    currentCount = 0
+            else:
+                currentCount += 1
+
+        if currentCount == 4:
+            if current == COMPUTER_PLAYER:
+                computer_wins += 1
+            else:
+                opponent_wins += 1
+        current = 0
+        currentCount = 0
+
+    # Check vertical wins
+    for j in range(0, BOARD_SIZE_X):
+        for i in range(0, BOARD_SIZE_Y):
+            if currentCount == 0:
+                if gameState[i][j] != 0:
+                    current = gameState[i][j]
+                    currentCount += 1
+            elif currentCount == 4:
+                if current == COMPUTER_PLAYER:
+                    computer_wins += 1
+                else:
+                    opponent_wins += 1
+                currentCount = 0
+                break
+            elif gameState[i][j] != current:
+                if gameState[i][j] != 0:
+                    current = gameState[i][j]
+                    currentCount = 1
+                else:
+                    current = 0
+                    currentCount = 0
+            else:
+                currentCount += 1
+
+        if currentCount == 4:
+            if current == COMPUTER_PLAYER:
+                computer_wins += 1
+            else:
+                opponent_wins += 1
+        current = 0
+        currentCount = 0
+
+    # Check diagonal wins
+    np_matrix = numpy.array(gameState)
+    diags = [np_matrix[::-1,:].diagonal(i) for i in range(-np_matrix.shape[0]+1,np_matrix.shape[1])]
+    diags.extend(np_matrix.diagonal(i) for i in range(np_matrix.shape[1]-1,-np_matrix.shape[0],-1))
+    diags_list = [n.tolist() for n in diags]
+
+    for i in range(0, len(diags_list)):
+        if len(diags_list[i]) >= 4:
+            for j in range(0, len(diags_list[i])):
+                if currentCount == 0:
+                    if diags_list[i][j] != 0:
+                        current = diags_list[i][j]
+                        currentCount += 1
+                elif currentCount == 4:
+                    if current == COMPUTER_PLAYER:
+                        computer_wins += 1
+                    else:
+                        opponent_wins += 1
+                    currentCount = 0
+                    break
+                elif diags_list[i][j] != current:
+                    if diags_list[i][j] != 0:
+                        current = diags_list[i][j]
+                        currentCount = 1
+                    else:
+                        current = 0
+                        currentCount = 0
+                else:
+                    currentCount += 1
+
+            if currentCount == 4:
+                if current == COMPUTER_PLAYER:
+                    computer_wins += 1
+                else:
+                    opponent_wins += 1
+            current = 0
+            currentCount = 0
+
+    if opponent_wins > 0:
+        return HUMAN_PLAYER
+    elif computer_wins > 0:
+        return COMPUTER_PLAYER
+    else:
+        return 0
+

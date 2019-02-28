@@ -1,15 +1,1 @@
-test with new row detection stuff
-	have better blue detection in low light
-		28	74
-		59	86
-		126	167
-
-	crop off bottom pixels fo blue mask
-	
-
-put in new AI:
-	https://github.com/nloyolag/connect4-ai
-
-
-better connect 4 ai
-	teach a nueral network?
+draw boxes for actualy min + max colors

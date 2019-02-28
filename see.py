@@ -7,27 +7,25 @@ import numpy as np
 class Detector():
 	def __init__(self):
 		self.board=Board()
+		#Get Threshold
+		self.rlower = (0,0,100)
+		self.rupper = (100,100,255)
+
+		self.ylower = (0,100,100)
+		self.yupper = (100,255,255)
+		
+		self.blower = (100,0,0)
+		self.bupper = (255,100,100)
 	def detect(self,img):
 		imgDebug=img.copy()
 
-		#Get Threshold
-		rlower = (0,0,100)
-		rupper = (100,100,255)
-		#rlower=(0,0,129)
-
-		ylower = (0,100,100)
-		yupper = (100,255,255)
-		
-		blower = (100,0,0)
-		bupper = (255,100,100)
-
-		rmask = cv2.inRange(img, rlower, rupper)
-		ymask = cv2.inRange(img, ylower, yupper)
+		rmask = cv2.inRange(img, self.rlower, self.rupper)
+		ymask = cv2.inRange(img, self.ylower, self.yupper)
 		thresh = cv2.bitwise_or(rmask,ymask)
 		cv2.imshow("thresh",thresh)
 
 		#Get threshold of board
-		bmask = cv2.inRange(img, blower, bupper)
+		bmask = cv2.inRange(img, self.blower, self.bupper)
 
 		kernal=np.ones((5,5),np.uint8)
 		smoothed = cv2.erode(bmask,kernal,iterations=2)
@@ -40,6 +38,7 @@ class Detector():
 		
 		board_x=board_y=0
 		board_h,board_w=img.shape[:2]
+		row_cnts_w=[]
 		if len(bcnts)>0:
 			bcnts_max=0
 			bcnts_i=-1
@@ -60,7 +59,7 @@ class Detector():
 			for con in bcnts[bcnts_i]:
 				y=int((float(con[0][1]-board_y)/float(board_h))*6.0)
 				bcnts_y[y].append(con[0])
-			row_cnts_w=[]
+			
 			for i in range(6):
 				if len(bcnts_y[i])>0:
 					x=min(bcnts_y[i],key=lambda x:x[0])[0]+20
@@ -199,7 +198,7 @@ class Detector():
 			def takex(elem):
 				return cv2.boundingRect(elem)[0]
 			r.sort(key=takex)
-			for i in r:
+			for j,i in enumerate(r):
 				cx,cy,cw,ch=cv2.boundingRect(i)
 				M = cv2.moments(i)
 				xx = int(M["m10"] / M["m00"])
@@ -211,8 +210,12 @@ class Detector():
 				cv2.putText(imgDebug ,str(_x),((xx+1,yy+1)),0,0.5,(0,0,0),1)
 				cv2.putText(imgDebug ,str(_x),((xx,yy)),0,0.5,(255,255,255),1)
 				
-				imgcolor=img[yy][xx]
-				i=self.getimgcolor(imgcolor)
+				#imgcolor=img[yy][xx]
+				#i=self.getimgcolor(imgcolor)
+
+				i=self.getimgcolor(i,img,j)
+
+
 				_x=clamp(_x,0,6)
 				b[y][_x]=i
 				x+=1
@@ -232,7 +235,22 @@ class Detector():
 		#cv2.waitKey(0)
 		return b
 
-	def getimgcolor(self,color):
+	def getimgcolor(self,cnt,img,name):
+
+		mask = np.zeros(img.shape[:2],np.uint8)
+		cv2.drawContours(mask, [cnt],-1, 255, -1)
+
+		mean = cv2.mean(img, mask=mask)
+		if self.rlower[0]<=mean[0] and self.rlower[1]<=mean[1] and self.rlower[2]<=mean[2] and  self.rupper[0]>=mean[0] and self.rupper[1]>=mean[1] and self.rupper[2]>=mean[2]:
+			return 1
+		if self.ylower[0]<=mean[0] and self.ylower[1]<=mean[1] and self.ylower[2]<=mean[2] and  self.yupper[0]>=mean[0] and self.yupper[1]>=mean[1] and self.yupper[2]>=mean[2]:
+			return 2
+		return 0
+		
+		
+
+
+		'''
 		red=(49,65,244)
 		yellow=(66,252,252)
 		#red=(0,0,150)
@@ -261,6 +279,7 @@ class Detector():
 			else:
 				return 2
 		return 0
+		'''
 
 class Board():
 	def __init__(self):
@@ -398,6 +417,15 @@ class Move():
 		return False
 
 	def convertBoard(self,board):
+
+		for y in range(len(board)):
+			for x in range(len(board[y])):
+				if board[y][x]==1:
+					board[y][x]=1
+				if board[y][x]==2:
+					board[y][x]=-1
+		return board
+		'''
 		board2 = []
 		for y in range(len(board)):
 			t=[]
@@ -410,6 +438,7 @@ class Move():
 					t.append('O')
 			board2.append(t)
 		return map("".join,zip(*board2))
+		'''
 
 	def drawBoard(self,board):
 		print ''
@@ -457,9 +486,13 @@ class Camera():
 	def step(self):
 		result = self.videoDevice.getImageRemote(self.captureDevice)
 		if result!=None and result[6]!=None:
-			values = map(ord, list(result[6]))
+			
+			#values = map(ord, list(result[6]))
 			#self.image=np.array(values).reshape(self.height, self.width,3)
-			self.image=np.array(values,dtype=self.image.dtype).reshape(self.height, self.width,3)
+			#self.image=np.array(values,dtype=self.image.dtype).reshape(self.height, self.width,3)
+			
+			self.image=np.fromstring(result[6], np.uint8).reshape(self.height, self.width,3)
+
 	def destruct(self):
 		self.videoDevice.unsubscribe(self.captureDevice)
 		print "destroyed camera"
